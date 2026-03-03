@@ -1,8 +1,14 @@
 #include <iostream>
 #include <fstream>
+#include <sstream>
+#include <iomanip>
 #include <vector>
 #include <cstdint>
 #include <cassert>
+
+#define _USE_MATH_DEFINES
+#include <math.h>
+
 
 //return a color value from r,g,b and alpha values
 uint32_t pack_color(const uint8_t r,const uint8_t g,const uint8_t b,const uint8_t a = 255){
@@ -50,7 +56,9 @@ void draw_rectangle(std::vector<uint32_t>&image,const size_t image_h,const size_
         for(int j = 0;j<rec_h;j++){
             const size_t rx = x+i;
             const size_t ry = y+j;
-            assert(rx<image_w&&ry<image_h);
+            if(rx>=image_w||ry>=image_h){
+                continue;
+            }
             image[ry*image_w+rx] = color;
         }
     }
@@ -58,9 +66,12 @@ void draw_rectangle(std::vector<uint32_t>&image,const size_t image_h,const size_
 
 int main(){
     const size_t window_height = 512;
-    const size_t window_width = 512;
-    std::vector<uint32_t> frame_buffer(window_width*window_height);
-    fill_gradient(frame_buffer,window_width,window_height);
+    const size_t window_width = 1024;
+    std::vector<uint32_t> frame_buffer(window_width*window_height,pack_color(255,255,255));
+    float player_x = 2.3;
+    float player_y = 2.345;
+    float player_q = 1.523;//direction
+    const float fov = M_PI/3.;//field of view
 
     const size_t map_w = 16; // map width
     const size_t map_h = 16; // map height
@@ -82,24 +93,49 @@ int main(){
                        "0002222222200000"; // our game map
     assert(sizeof(map) == map_w*map_h+1); // +1 for the null terminated string
 
-    const size_t rect_w = window_width/map_w;
+    const size_t rect_w = window_width/(map_w*2);
     const size_t rect_h = window_height/map_h;
-    for (size_t j=0; j<map_h; j++) { // draw the map
-        for (size_t i=0; i<map_w; i++) {
-            if (map[i+j*map_w]==' ') continue; // skip empty spaces
-            size_t rect_x = i*rect_w;
-            size_t rect_y = j*rect_h;
-            draw_rectangle(frame_buffer, window_width, window_height, rect_x, rect_y, rect_w, rect_h,
-                pack_color(0, 255, 255));
+
+  
+    for(size_t frame = 0;frame<90;frame++){
+        std::stringstream ss;
+        ss << std::setfill('0') << std::setw(5) << frame << ".ppm";
+        player_q += 2*M_PI/360;
+        frame_buffer = std::vector<uint32_t>(window_height*window_width,pack_color(255,255,255));
+        for (size_t j=0; j<map_h; j++) { // draw the map
+            for (size_t i=0; i<map_w; i++) {
+                if (map[i+j*map_w]==' ') continue; // skip empty spaces
+                size_t rect_x = i*rect_w;
+                size_t rect_y = j*rect_h;
+                draw_rectangle(frame_buffer, window_height, window_width, rect_x, rect_y, rect_h, rect_w,
+                    pack_color(0, 255, 255));
+            }
         }
+        for (size_t i=0; i<window_width/2; i++) { // draw the visibility cone
+            float angle = player_q-fov/2 + fov*i/float(window_width/2);
+            //trace ray
+            for (float t=0; t<20; t+=.01) {
+                float cx = player_x + t*cos(angle);
+                float cy = player_y + t*sin(angle);
+
+                size_t pix_x = cx*rect_w;
+                size_t pix_y = cy*rect_h;
+                frame_buffer[pix_x + pix_y*window_width] = pack_color(160,160,160);
+
+                if(map[int(cx)+int(cy)*map_w]!=' '){//ray touches a wall
+                        size_t col_h = window_height/(t*cos(angle-player_q));
+                        draw_rectangle(frame_buffer,window_height,window_width,window_width/2+i,window_height/2-col_h/2,
+                        col_h,1,pack_color(0,255,255)
+                        );
+                        break;
+                }
+
+            }
+        }
+        drop_ppm_image("./images/"+ss.str(),frame_buffer,window_width,window_height);
     }
-
-    float player_x = 4.3f;
-    float player_y = 2.345f;
-
-    draw_rectangle(frame_buffer,window_height,window_width,rect_w*player_x,rect_h*player_y,5,5,pack_color(0,0,0));
-
-    drop_ppm_image("./out.ppm",frame_buffer,window_width,window_height);
+ 
     return 0;
 }
 
+#undef _USE_MATH_DEFINES

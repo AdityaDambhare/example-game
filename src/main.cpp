@@ -105,7 +105,18 @@ void draw_rectangle(std::vector<uint32_t>&image,const size_t image_h,const size_
         }
     }
 }
-
+std::vector<uint32_t> texture_column(const std::vector<uint32_t> &img, const size_t texsize, const size_t ntextures, const size_t texid, const size_t texcoord, const size_t column_height) {
+    const size_t img_w = texsize*ntextures;
+    const size_t img_h = texsize;
+    assert(img.size()==img_w*img_h && texcoord<texsize && texid<ntextures);
+    std::vector<uint32_t> column(column_height);
+    for (size_t y=0; y<column_height; y++) {
+        size_t pix_x = texid*texsize + texcoord;
+        size_t pix_y = (y*texsize)/column_height;
+        column[y] = img[pix_x + pix_y*img_w];
+    }
+    return column;
+}
 
 int main(){
     const size_t window_height = 512;
@@ -168,17 +179,31 @@ int main(){
                 float cx = player_x + t*cos(angle);
                 float cy = player_y + t*sin(angle);
 
-                size_t pix_x = cx*rect_w;
-                size_t pix_y = cy*rect_h;
+                int pix_x = cx*rect_w;
+                int pix_y = cy*rect_h;
                 frame_buffer[pix_x + pix_y*window_width] = pack_color(160,160,160);
 
                 if(map[int(cx)+int(cy)*map_w]!=' '){//ray touches a wall
                         size_t icolor = map[(int)cx+(int)cy*map_w]-'0';
                         assert(icolor<ncolors);
                         size_t col_h = window_height/(t*cos(angle-player_q));
-                        draw_rectangle(frame_buffer,window_height,window_width,window_width/2+i,window_height/2-col_h/2,
-                        col_h,1,colors[icolor]
-                        );
+                        float hitx = cx - floor(cx+.5);
+                        float hity = cy - floor(cy+.5);
+                        size_t texid = map[int(cx)+int(cy)*map_w] - '0';
+                        int x_textcoord = hitx*walltext_size;
+                        if(std::abs(hity)>std::abs(hitx)){
+                            x_textcoord = hity*walltext_size;
+                        }
+                        if(x_textcoord<0) x_textcoord+=walltext_size;
+                        assert(x_textcoord>=0&&x_textcoord<(int)walltext_size);
+                        std::vector<uint32_t> column = texture_column(walltext, walltext_size, walltext_cnt,texid,x_textcoord, 
+                        col_h);
+                        pix_x = window_width/2+i;
+                    for (size_t j=0; j<col_h; j++) {
+                        pix_y = j + window_height/2-col_h/2;
+                        if (pix_y<0 || pix_y>=(int)window_height) continue;
+                        frame_buffer[pix_x + pix_y*window_width] = column[j];
+                    }
                         break;
                 }
             }
